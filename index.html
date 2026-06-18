@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grandmaster's Hall — Premium Chess</title>
+    <meta name="description" content="Premium online chess — play against AI or challenge friends in real-time multiplayer with Stockfish engine, live chat, and elegant design.">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Poppins:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <!-- Socket.io client -->
+    <script src="/socket.io/socket.io.js"></script>
+    <!-- Chess.js for client-side move validation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+</head>
+<body>
+
+    <!-- ============ LOBBY SCREEN ============ -->
+    <div id="lobby-screen" class="screen active">
+        <div class="lobby-container">
+            <header class="lobby-header">
+                <div class="logo-area">
+                    <div class="logo-icon">♚</div>
+                    <h1>Grandmaster's Hall</h1>
+                    <p class="tagline">Premium Chess Experience</p>
+                </div>
+            </header>
+
+            <div class="mode-cards">
+                <!-- Play vs AI -->
+                <div class="mode-card" id="ai-card">
+                    <div class="card-glow"></div>
+                    <div class="card-icon">🤖</div>
+                    <h3>Play vs Computer</h3>
+                    <p>Challenge the AI engine</p>
+                    <div class="card-options">
+                        <div class="option-group">
+                            <label for="ai-difficulty">Difficulty</label>
+                            <select id="ai-difficulty">
+                                <option value="easy">♟ Easy</option>
+                                <option value="medium" selected>♞ Medium</option>
+                                <option value="hard">♛ Grandmaster</option>
+                            </select>
+                        </div>
+                        <div class="option-group">
+                            <label for="ai-time">Time Control</label>
+                            <select id="ai-time">
+                                <option value="180">3 min</option>
+                                <option value="300" selected>5 min</option>
+                                <option value="600">10 min</option>
+                                <option value="900">15 min</option>
+                                <option value="0">∞ No Limit</option>
+                            </select>
+                        </div>
+                        <div class="option-group">
+                            <label for="ai-color">Play As</label>
+                            <select id="ai-color">
+                                <option value="w" selected>⬜ White</option>
+                                <option value="b">⬛ Black</option>
+                                <option value="random">🎲 Random</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="btn btn-gold" id="play-ai-btn">Start Game</button>
+                </div>
+
+                <!-- Quick Match -->
+                <div class="mode-card" id="match-card">
+                    <div class="card-glow"></div>
+                    <div class="card-icon">⚔️</div>
+                    <h3>Quick Match</h3>
+                    <p>Find a random opponent</p>
+                    <div class="card-options">
+                        <div class="option-group">
+                            <label for="match-time">Time Control</label>
+                            <select id="match-time">
+                                <option value="180">3 min — Blitz</option>
+                                <option value="300" selected>5 min — Blitz</option>
+                                <option value="600">10 min — Rapid</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="btn btn-gold" id="find-match-btn">Find Opponent</button>
+                </div>
+
+                <!-- Create Private Room -->
+                <div class="mode-card" id="create-card">
+                    <div class="card-glow"></div>
+                    <div class="card-icon">🏰</div>
+                    <h3>Create Room</h3>
+                    <p>Invite a friend to play</p>
+                    <div class="card-options">
+                        <div class="option-group">
+                            <label for="room-time">Time Control</label>
+                            <select id="room-time">
+                                <option value="180">3 min</option>
+                                <option value="300" selected>5 min</option>
+                                <option value="600">10 min</option>
+                                <option value="900">15 min</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="btn btn-gold" id="create-room-btn">Create Room</button>
+                </div>
+
+                <!-- Join Room -->
+                <div class="mode-card" id="join-card">
+                    <div class="card-glow"></div>
+                    <div class="card-icon">🚪</div>
+                    <h3>Join Room</h3>
+                    <p>Enter a code to join</p>
+                    <div class="card-options">
+                        <div class="option-group">
+                            <label for="room-code-input">Room Code</label>
+                            <input type="text" id="room-code-input" placeholder="e.g. A1B2C3" maxlength="6" autocomplete="off" spellcheck="false">
+                        </div>
+                    </div>
+                    <button class="btn btn-gold" id="join-room-btn">Join Game</button>
+                </div>
+            </div>
+
+            <footer class="lobby-footer">
+                <p>Powered by Stockfish Engine · Built with ♥</p>
+            </footer>
+        </div>
+    </div>
+
+    <!-- ============ GAME SCREEN ============ -->
+    <div id="game-screen" class="screen">
+        <div class="game-container">
+            <!-- Game Header -->
+            <div class="game-header">
+                <button class="btn btn-ghost" id="back-to-lobby">← Lobby</button>
+                <div class="game-mode-badge" id="game-mode-badge">vs Computer</div>
+                <div class="room-code-display" id="room-code-display">
+                    Room: <span id="room-code-text"></span>
+                    <button class="btn-icon" id="copy-room-code" title="Copy room code">📋</button>
+                </div>
+            </div>
+
+            <div class="game-layout">
+                <!-- Left: Board Area -->
+                <div class="board-area">
+                    <!-- Opponent Bar -->
+                    <div class="player-bar opponent-bar" id="opponent-bar">
+                        <div class="player-info">
+                            <span class="player-icon">♟</span>
+                            <span class="player-name" id="opponent-name">Opponent</span>
+                            <div class="captured-pieces" id="opponent-captured"></div>
+                        </div>
+                        <div class="timer-display" id="opponent-timer">
+                            <span class="timer-value">05:00</span>
+                        </div>
+                    </div>
+
+                    <!-- Chess Board -->
+                    <div class="board-wrapper">
+                        <div class="coords-col" id="coords-col"></div>
+                        <div id="chessboard" class="chessboard"></div>
+                        <div class="coords-row" id="coords-row"></div>
+                    </div>
+
+                    <!-- Player Bar -->
+                    <div class="player-bar player-bar-self" id="player-bar">
+                        <div class="player-info">
+                            <span class="player-icon">♙</span>
+                            <span class="player-name" id="player-name">You</span>
+                            <div class="captured-pieces" id="player-captured"></div>
+                        </div>
+                        <div class="timer-display active" id="player-timer">
+                            <span class="timer-value">05:00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Side Panel -->
+                <div class="side-panel">
+                    <!-- Status Bar -->
+                    <div class="status-bar" id="game-status">White to move</div>
+
+                    <!-- Move History -->
+                    <div class="panel-section" id="moves-panel">
+                        <div class="panel-header">
+                            <h3>♜ Moves</h3>
+                        </div>
+                        <div class="moves-list" id="moves-list">
+                            <div class="moves-placeholder">Game moves will appear here...</div>
+                        </div>
+                    </div>
+
+                    <!-- Chat Panel (multiplayer only) -->
+                    <div class="panel-section" id="chat-panel">
+                        <div class="panel-header">
+                            <h3>💬 Chat</h3>
+                        </div>
+                        <div class="chat-messages" id="chat-messages"></div>
+                        <form id="chat-form" class="chat-input-area">
+                            <input type="text" id="chat-input" placeholder="Type a message..." autocomplete="off">
+                            <button type="submit" class="btn-send" title="Send message">➤</button>
+                        </form>
+                    </div>
+
+                    <!-- Game Controls -->
+                    <div class="game-controls" id="game-controls">
+                        <button class="btn btn-danger" id="resign-btn" title="Resign the game">🏳️ Resign</button>
+                        <button class="btn btn-secondary" id="draw-btn" title="Offer a draw">🤝 Draw</button>
+                        <button class="btn btn-gold" id="new-game-btn" title="Start a new game">🔄 New Game</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ MODALS ============ -->
+    <div class="modal-overlay" id="modal-overlay">
+        <!-- Waiting / Matchmaking Modal -->
+        <div class="modal" id="waiting-modal">
+            <div class="spinner"></div>
+            <h3>Finding opponent...</h3>
+            <p>Searching for a worthy challenger</p>
+            <button class="btn btn-danger" id="cancel-match-btn">Cancel</button>
+        </div>
+
+        <!-- Room Created Modal -->
+        <div class="modal" id="room-created-modal">
+            <h3>🏰 Room Created!</h3>
+            <div class="room-code-big" id="room-code-big">------</div>
+            <p>Share this code with your friend</p>
+            <button class="btn btn-gold" id="copy-code-btn">📋 Copy Code</button>
+            <div class="waiting-section">
+                <div class="spinner"></div>
+                <p>Waiting for opponent to join...</p>
+            </div>
+            <button class="btn btn-ghost" id="cancel-room-btn">Cancel</button>
+        </div>
+
+        <!-- Disconnection Modal -->
+        <div class="modal" id="disconnect-modal">
+            <div class="disconnect-icon">⚡</div>
+            <h3>Opponent Disconnected</h3>
+            <p>Waiting for reconnection...</p>
+            <div class="countdown-circle" id="disconnect-countdown">
+                <svg viewBox="0 0 100 100">
+                    <circle class="countdown-bg" cx="50" cy="50" r="45"></circle>
+                    <circle class="countdown-progress" id="countdown-progress" cx="50" cy="50" r="45"></circle>
+                </svg>
+                <span class="countdown-text" id="countdown-text">30</span>
+            </div>
+        </div>
+
+        <!-- Game Over Modal -->
+        <div class="modal" id="gameover-modal">
+            <div class="gameover-icon" id="gameover-icon">♚</div>
+            <h3 id="gameover-title">Game Over</h3>
+            <p id="gameover-message">Checkmate! White wins.</p>
+            <div class="gameover-actions">
+                <button class="btn btn-gold" id="rematch-btn">🔄 Rematch</button>
+                <button class="btn btn-ghost" id="lobby-btn">🏠 Lobby</button>
+            </div>
+        </div>
+
+        <!-- Draw Offer Modal -->
+        <div class="modal" id="draw-offer-modal">
+            <h3>🤝 Draw Offered</h3>
+            <p>Your opponent offers a draw. Accept?</p>
+            <div class="draw-actions">
+                <button class="btn btn-gold" id="accept-draw-btn">✅ Accept</button>
+                <button class="btn btn-danger" id="decline-draw-btn">❌ Decline</button>
+            </div>
+        </div>
+
+        <!-- Promotion Modal -->
+        <div class="modal" id="promotion-modal">
+            <h3>♛ Promote Pawn</h3>
+            <div class="promotion-pieces" id="promotion-pieces"></div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
